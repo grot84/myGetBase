@@ -1,0 +1,254 @@
+Set oUtils = ObjectUtilsInit()
+
+Set oIE = CreateObject("InternetExplorer.application")
+oIE.visible=True
+oIE.Navigate "https://getbase.com/pricing/"
+
+Call IESync
+
+Set oBrowser = oUtils.GetChildObject (Desktop,"Plans and Pricing | Base CRM","Browser")
+Set oPage  = oUtils.GetChildObject (oBrowser,"","Page")
+Set oLink = oUtils.GetChildObject (oPage,"Login","Link")
+
+oLink.Click
+
+Call IESync
+
+Set oBrowser = oUtils.GetChildObject (Desktop,"Login to Base","Browser")
+Set oPageLogin = oUtils.GetChildObject (oBrowser,"","Page")
+Set oWebEditUser = oUtils.GetChildObjectByPropertyValue (oPageLogin,"name","user\[email\]","WebEdit")
+Set oWebEditPassword = oUtils.GetChildObjectByPropertyValue (oPageLogin,"name","user\[password\]","WebEdit")
+Set oWebButtonLogin = oUtils.GetChildObjectByPropertyValue (oPageLogin,"name","Login","WebButton")
+
+Call oWebEditUser.Set ("grot84@gmail.com")
+Call oWebEditPassword.SetSecure ("52e783bda2e735426bfb9539fc8a45c8194d0176")
+oWebButtonLogin.Click
+
+Call IESync
+
+Set oBrowser = oUtils.GetChildObject (Desktop,"Base CRM#sales#sales","Browser")
+Set oPageCRM = oUtils.GetChildObject (oBrowser,"","Page")
+Set oLinkLead = oUtils.GetChildObject (oPageCRM,"O","Link")
+
+oLinkLead.Click
+
+Call IESync
+
+Set oBrowser = oUtils.GetChildObject (Desktop,"Base CRM: Leads","Browser")
+Set oPageLead = oUtils.GetChildObject (oBrowser,"","Page")
+Set oLinkLeadNew = oUtils.GetChildObject (oPageLead,"Lead","Link")
+
+oLinkLeadNew.Click
+
+Call IESync
+
+Set oBrowser = oUtils.GetChildObject (Desktop,"Base CRM: Leads#leads/new#leads/new","Browser")
+Set oPageLead2 = oUtils.GetChildObject (oBrowser,"","Page")
+Set oWebButtonFirstName = oUtils.GetChildObjectByPropertyValue (oPageLead2,"name","first_name","WebEdit")
+Set oWebButtonLastName = oUtils.GetChildObjectByPropertyValue (oPageLead2,"name","last_name","WebEdit")
+Set oLinkSave = oUtils.GetChildObject (oPageLead2,"Save","Link")
+Set oWebListStatus = oUtils.GetChildObjectByPropertyValue (oPageLead2,"name","status_id","WebList")
+
+
+oWebButtonFirstName.Set "Name"
+oWebButtonLastName.Set "LastName"
+oLinkSave.Click
+
+Call IESync
+
+
+Set oBrowser = oUtils.GetChildObject (Desktop,"Base CRM","Browser")
+Set oPageLead3 = oUtils.GetChildObject (oBrowser,"","Page")
+Set oLinkEdit = oUtils.GetChildObject (oPageLead3,"Edit","Link")
+
+If oUtils.IsChildObjectAvailable(oPageLead3,"Newstatus","Link") Then
+	Reporter.ReportEvent 0, "Checking Lead Status", "Status New OK"
+Else
+	Reporter.ReportEvent 1, "Checking Lead Status", "Status New not there"
+End If
+
+oLinkEdit.Click
+
+Call IESync
+
+oWebListStatus.Select "Working"
+oLinkSave.Click
+
+If oUtils.IsChildObjectAvailable(oPageLead3,"Workingstatus","Link") Then
+	Reporter.ReportEvent 0, "Checking Lead Status", "Status Workingstatus OK"
+Else
+	Reporter.ReportEvent 1, "Checking Lead Status", "Status Workingstatus not there"
+End If
+
+
+Sub IESync()
+   WaitCount = 0
+	Do While oIE.ReadyState <> 4 And WaitCount < 10
+		Wait(1)
+		WaitCount=WaitCount+1
+	Loop 
+End Sub
+
+
+Public Function ObjectUtilsInit()
+
+	Set ObjectUtilsInit = new ObjectUtils
+
+End Function
+
+Class ObjectUtils
+
+    Public SyncWait, NrOfTries, NotQtp, IgnoreAmpersand
+    
+    Public Sub Class_Initialize()
+		SyncWait  		= 5
+        NrOfTries 	    = 0
+		IgnoreAmpersand = 0
+
+        Set NotQtp        = new RegExp
+        NotQtp.IgnoreCase = true
+        NotQtp.Pattern    = "QuickTest" 
+
+	End Sub
+
+	Public Sub DeselectAllCheckBox(objParent)
+		Set ObjTypeDesc = Description.Create()
+        ObjTypeDesc("micClass").Value= "WinCheckBox"
+        Set myChildrenColl = objParent.ChildObjects(ObjTypeDesc)
+
+		For i = 0 to myChildrenColl.Count - 1
+			If myChildrenColl(i).GetROProperty("checked") = "ON" Then
+				myChildrenColl(i).Click()
+			End If
+		Next
+	End Sub
+
+    Public Function GetChildObject (objParent,ChildName,ChildClassName)
+
+        Set GetChildObject = Nothing
+
+        Set ObjTypeDesc = Description.Create()
+        ObjTypeDesc("micClass").Value= ChildClassName
+        Set myChildrenColl = objParent.ChildObjects(ObjTypeDesc)
+
+        Set ChildNameRegExp        = new RegExp
+        ChildNameRegExp.IgnoreCase = true
+        ChildNameRegExp.Pattern    = ChildName
+
+        For i = 0 to myChildrenColl.Count - 1
+            If Not NotQtp.Test(myChildrenColl(i).GetROProperty("text")) Then
+				If IgnoreAmpersand = 1 Then
+					NewText 	    = Replace(myChildrenColl(i).GetROProperty("text"),"&","")
+					NewAttachedText = Replace(myChildrenColl(i).GetROProperty("attached text"),"&","")
+					If ChildNameRegExp.Test(NewText) or ChildNameRegExp.Test(NewAttachedText) Then               
+						Set GetChildObject = myChildrenColl(i)
+						NrOfTries = 0
+						Exit Function
+					End If
+				Else
+					If ChildNameRegExp.Test(myChildrenColl(i).GetROProperty("text")) or ChildNameRegExp.Test(myChildrenColl(i).GetROProperty("attached text")) Then               
+						Set GetChildObject = myChildrenColl(i)
+						NrOfTries = 0
+						Exit Function
+					End If
+				End If
+            End If
+        Next
+
+		On Error Resume Next
+			For i = 0 to myChildrenColl.Count - 1
+				If ChildNameRegExp.Test(myChildrenColl(i).GetROProperty("swfname")) Then               
+						Set GetChildObject = myChildrenColl(i)
+						NrOfTries = 0
+						Exit Function					
+				End If
+			Next
+		On Error GoTo 0
+		
+		
+       If GetChildObject is Nothing and NrOfTries <= 10 Then
+            Print "GetChildObject: " & NrOfTries
+            NrOfTries = NrOfTries + 1
+            If NrOfTries = 11 Then
+                Reporter.ReportEvent 1, "Get Object", "Object: " & VbCrLf & ChildName & VbCrLf & " does not exist"
+                Set GetChildObject = Nothing
+                NrOfTries = 0      
+                Exit Function
+            End If
+            Wait(SyncWait)
+            Set GetChildObject = GetChildObject (objParent,ChildName,ChildClassName)            
+        End If
+
+    End Function
+
+
+    Public Function GetChildObjectByPropertyValue (objParent, PropertyName, PropertyValue,ChildClassName)
+
+        Set GetChildObjectByPropertyValue = Nothing
+
+        Set ObjTypeDesc = Description.Create()
+        ObjTypeDesc("micClass").Value= ChildClassName
+        Set myChildrenColl = objParent.ChildObjects(ObjTypeDesc)
+
+        Set ChildNameRegExp        = new RegExp
+        ChildNameRegExp.IgnoreCase = true
+        ChildNameRegExp.Pattern    = PropertyValue
+
+        For i = 0 to myChildrenColl.Count - 1
+            If ChildNameRegExp.Test(myChildrenColl(i).GetROProperty(PropertyName)) Then               
+                Set GetChildObjectByPropertyValue = myChildrenColl(i)
+                NrOfTries = 0
+                Exit Function
+            End If
+        Next
+
+       If GetChildObjectByPropertyValue is Nothing and NrOfTries <= 10 Then
+            Print "GetChildObjectByPropertyValue: " & NrOfTries
+            NrOfTries = NrOfTries + 1
+            If NrOfTries = 11 Then
+                Reporter.ReportEvent 1, "Get Object", "Object: " & VbCrLf & PropertyName & ":" & PropertyValue & VbCrLf & " does not exist"
+                Set GetChildObjectByPropertyValue = Nothing
+                NrOfTries = 0      
+                Exit Function
+            End If
+            Wait(SyncWait)
+            Set GetChildObjectByPropertyValue = GetChildObjectByPropertyValue (objParent, PropertyName, PropertyValue,ChildClassName)           
+        End If
+
+    End Function
+
+
+    Public Function IsChildObjectAvailable(objParent,ChildName,ChildClassName)
+
+        IsChildObjectAvailable = False
+
+        Set ObjTypeDesc = Description.Create()
+        ObjTypeDesc("micClass").Value= ChildClassName
+
+		On Error Resume Next
+			Set myChildrenColl = objParent.ChildObjects(ObjTypeDesc)
+			If Err.Number <> 0 Then
+				Exit Function
+			End If
+		On Error GoTo 0
+
+        Set ChildNameRegExp        = new RegExp
+        Set ChildNameRegExp        = new RegExp
+        ChildNameRegExp.Pattern    = ChildName
+
+        For i = 0 to myChildrenColl.Count - 1
+            If ChildNameRegExp.Test(myChildrenColl(i).GetROProperty("text")) or ChildNameRegExp.Test(myChildrenColl(i).GetROProperty("attached text")) Then               
+                IsChildObjectAvailable = True
+            End If
+        Next
+
+    End Function
+
+End Class
+
+
+
+
+
+
+
